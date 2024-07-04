@@ -66,7 +66,7 @@
         },
         methods: {
             async generateText() {
-                const genAI = new GoogleGenerativeAI(process.env.VUE_APP_GOOGLE_GENAI_API_KEY)
+                const genAI = new GoogleGenerativeAI('AIzaSyA9T7ArQWTWHhwtmfAgWXKyj8IgfKwfwjw')
                 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
                 const result = await model.generateContent(this.transcript)
