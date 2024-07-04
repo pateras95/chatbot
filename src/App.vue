@@ -20,8 +20,11 @@
             </div>
         </div>
         <p class="spoken-text"  v-if="text">{{ text }}</p>
-        <input type="text" v-model="prompt" placeholder="Enter your prompt..." />
+        <input type="text" v-model="transcript" placeholder="Enter your prompt..." />
         <button @click="generateText">Generate Text</button>
+
+        <button @click="startListening">Start Listening</button>
+        <p v-if="transcript">Transcript: {{ transcript }}</p>
     </div>
 </template>
 
@@ -33,14 +36,32 @@
             return {
                 prompt: '',
                 text: 'Hello, i am the museum bot\n,' +
-                    ' how can i help you?'
+                    ' how can i help you?',
+                recognition: null,
+                transcript: '',
+                isListening: false
             }
         },
         mounted() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+            if (!SpeechRecognition) {
+                console.log('Speech Recognition API not supported in this browser.')
+            }
+            this.recognition = new SpeechRecognition()
+            this.recognition.lang = 'en-US'
+            this.recognition.continuous = true
+            this.recognition.interimResults = true
+
+            // Bind event handlers
+            this.recognition.onresult = this.onSpeechResult
+            this.recognition.onerror = this.onSpeechError
+            this.recognition.onend = this.onSpeechEnd
+
             const utterance = new SpeechSynthesisUtterance(this.text)
             speechSynthesis.speak(utterance)
             utterance.onend = (event) => {
                 this.text = '' // end animation
+                this.startListening()
             }
         },
         methods: {
@@ -48,7 +69,7 @@
                 const genAI = new GoogleGenerativeAI(process.env.VUE_APP_GOOGLE_GENAI_API_KEY)
                 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
-                const result = await model.generateContent(this.prompt)
+                const result = await model.generateContent(this.transcript)
                 const response = await result.response
                 this.text = response.text()
                 if (this.text !== '') {
@@ -58,6 +79,43 @@
             speak() {
                 const utterance = new SpeechSynthesisUtterance(this.text)
                 speechSynthesis.speak(utterance)
+                utterance.onend = (event) => {
+                    this.text = '' // end animation
+                    this.startListening()
+                }
+            },
+            startListening() {
+                if (!this.isListening) {
+                    this.recognition.start()
+                    this.isListening = true
+                    this.error = ''
+                    // Start timeout to stop recognition after 10 seconds of silence
+                    this.listeningTimeout = setTimeout(() => {
+                        if (this.isListening) {
+                            this.recognition.stop()
+                            this.isListening = false
+                        }
+                    }, 10000) // Adjust timeout duration as needed
+                } else {
+                    this.recognition.stop()
+                    this.isListening = false
+                    clearTimeout(this.listeningTimeout)
+                }
+            },
+            onSpeechResult(event) {
+                const transcript = Array.from(event.results)
+                    .map(result => result[0].transcript)
+                    .join('')
+                this.transcript = transcript
+            },
+            onSpeechError(event) {
+                this.error = `Error occurred in recognition: ${event.error}`
+                this.isListening = false
+            },
+            onSpeechEnd() {
+                this.isListening = false
+                console.log(this.transcript)
+                this.generateText()
             }
         }
     }
